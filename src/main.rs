@@ -1,8 +1,8 @@
-use std::fs;
 use std::path::Path;
+use std::{env, fs};
 use swc_common::{sync::Lrc, SourceFile, SourceMap};
 use swc_ecma_ast::*;
-use swc_ecma_parser::{lexer::Lexer, EsConfig, Parser, StringInput, Syntax};
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 use swc_ecma_visit::{Visit, VisitWith};
 
 struct Analyzer {
@@ -37,31 +37,45 @@ impl TreeVisitor {
 
 impl Visit for TreeVisitor {
     fn visit_call_expr(&mut self, call_expr: &CallExpr) {
+        let default_hooks = [
+            "useState",
+            "useEffect",
+            "useContext",
+            "useReducer",
+            "useCallback",
+            "useMemo",
+            "useRef",
+            "useImperativeHandle",
+            "useLayoutEffect",
+            "useDebugValue",
+            "useTransition",
+            "useDeferredValue",
+            "useId",
+        ];
+
         if let Callee::Expr(expr) = &call_expr.callee {
-            if let Expr::Member(member_expr) = &**expr {
-                if let Expr::Ident(obj_id) = &*member_expr.obj {
-                    let default_hooks = [
-                        "useState",
-                        "useEffect",
-                        "useContext",
-                        "useReducer",
-                        "useCallback",
-                        "useMemo",
-                        "useRef",
-                        "useImperativeHandle",
-                        "useLayoutEffect",
-                        "useDebugValue",
-                        "useTransition",
-                        "useDeferredValue",
-                        "useId",
-                    ];
-                    if default_hooks.contains(&obj_id.sym.as_ref()) {
-                        println!(
-                            "Default hook \"{:?}\" found in file \"{}\"",
-                            obj_id.sym, self.filename
-                        );
-                    } else {
-                        println!("No hooks");
+            // check directly for use* without React.* object reference
+            if let Expr::Ident(obj_id) = &**expr {
+                if default_hooks.contains(&obj_id.sym.as_ref()) {
+                    println!(
+                        "Default hook \"{:?}\" found in file \"{}\" \n",
+                        obj_id.sym, self.filename
+                    );
+                } else {
+                    println!("No hook in file {}", self.filename);
+                }
+            } else if let Expr::Member(member_expr) = &**expr {
+                // check for React.use*
+                if let Expr::Ident(_obj_id) = &*member_expr.obj {
+                    if let MemberProp::Ident(prop_id) = &member_expr.prop {
+                        if default_hooks.contains(&prop_id.sym.as_ref()) {
+                            println!(
+                                "Default hook \"{:?}\" found in file \"{}\"",
+                                prop_id.sym, self.filename
+                            );
+                        } else {
+                            println!("No hook in file {}", self.filename);
+                        }
                     }
                 }
             }
@@ -75,13 +89,13 @@ fn parse_file(filename: &str) -> Result<Module, swc_ecma_parser::error::Error> {
     let cm: Lrc<SourceMap> = Default::default();
     let fm = cm
         .load_file(Path::new(filename))
-        .expect("failed to load test.js");
+        .expect("failed to load file");
 
     let source_file: &SourceFile = &*fm;
 
     let lexer = Lexer::new(
-        Syntax::Es(EsConfig {
-            jsx: true,
+        Syntax::Typescript(TsConfig {
+            tsx: true,
             ..Default::default()
         }),
         Default::default(),
@@ -92,7 +106,13 @@ fn parse_file(filename: &str) -> Result<Module, swc_ecma_parser::error::Error> {
     let mut parser = Parser::new_from(lexer);
     let module = parser.parse_module();
 
-    Ok(module?)
+    match module {
+        Ok(m) => Ok(m),
+        Err(e) => {
+            eprintln!("Error parsing file {}: {:?}", filename, e);
+            Err(e)
+        }
+    }
 }
 
 fn analyze_directory(directory_file: &Path) {
@@ -101,7 +121,7 @@ fn analyze_directory(directory_file: &Path) {
         let path = entry.path();
 
         if path.is_dir() {
-            if path.ends_with("hook") {
+            if path.ends_with("hooks") {
                 analyze_hook_dir(&path)
             } else {
                 analyze_directory(&path);
@@ -124,6 +144,7 @@ fn analyze_hook_dir(directory_path: &Path) {
                 match parse_file(path.to_str().unwrap()) {
                     Ok(module) => {
                         let analyzer = Analyzer::new(path.to_str().unwrap());
+
                         analyzer.run(&module);
                     }
                     Err(err) => {
@@ -136,6 +157,11 @@ fn analyze_hook_dir(directory_path: &Path) {
 }
 
 fn main() {
-    let src_directory = Path::new("src");
+    let args: Vec<String> = env::args().collect();
+
+    let dir = &args[1];
+    println!("{:?}", dir);
+
+    let src_directory = Path::new(dir);
     analyze_directory(src_directory);
 }
