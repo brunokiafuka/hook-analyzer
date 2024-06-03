@@ -1,5 +1,5 @@
-use std::fs;
 use std::path::Path;
+use std::{collections::HashMap, fs};
 use swc_common::{sync::Lrc, SourceFile, SourceMap};
 use swc_ecma_ast::*;
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
@@ -11,6 +11,7 @@ struct Analyzer {
 
 struct TreeVisitor {
     filename: String,
+    pub report: HashMap<String, Vec<String>>,
 }
 
 impl Analyzer {
@@ -20,10 +21,13 @@ impl Analyzer {
         }
     }
 
-    fn run(&self, module: &Module) {
+    fn run(&self, module: &Module) -> HashMap<String, Vec<String>> {
         let mut visitor = TreeVisitor::new(&self.filename);
 
         module.visit_with(&mut visitor);
+
+        // this returns the report after running the `visit_call_expr`
+        visitor.report
     }
 }
 
@@ -31,11 +35,29 @@ impl TreeVisitor {
     fn new(filename: &str) -> Self {
         Self {
             filename: filename.to_string(),
+            report: HashMap::new(),
         }
+    }
+
+    fn arrange_report(&mut self, value: String) {
+        let key = self.filename.to_string();
+
+        let empty_vec = vec![];
+
+        let previous_result = match self.report.get(&key) {
+            Some(x) => x,
+            None => &empty_vec,
+        };
+
+        let mut copy_previous_result = previous_result.clone();
+        copy_previous_result.push(value);
+
+        self.report.insert(key, copy_previous_result);
     }
 }
 
 impl Visit for TreeVisitor {
+    // TODO: check non caller cases and handle empty states
     fn visit_call_expr(&mut self, call_expr: &CallExpr) {
         let default_hooks = [
             "useState",
@@ -57,10 +79,7 @@ impl Visit for TreeVisitor {
             // check directly for use* without React.* object reference
             if let Expr::Ident(obj_id) = &**expr {
                 if default_hooks.contains(&obj_id.sym.as_ref()) {
-                    println!(
-                        "Default hook \"{:?}\" found in file \"{}\" \n",
-                        obj_id.sym, self.filename
-                    );
+                    self.arrange_report(obj_id.sym.as_ref().to_string());
                 } else {
                     println!("No hook in file {}", self.filename);
                 }
@@ -69,10 +88,7 @@ impl Visit for TreeVisitor {
                 if let Expr::Ident(_obj_id) = &*member_expr.obj {
                     if let MemberProp::Ident(prop_id) = &member_expr.prop {
                         if default_hooks.contains(&prop_id.sym.as_ref()) {
-                            println!(
-                                "Default hook \"{:?}\" found in file \"{}\"",
-                                prop_id.sym, self.filename
-                            );
+                            self.arrange_report(prop_id.sym.as_ref().to_string());
                         } else {
                             println!("No hook in file {}", self.filename);
                         }
@@ -115,22 +131,28 @@ fn parse_file(filename: &str) -> Result<Module, swc_ecma_parser::error::Error> {
     }
 }
 
-pub fn read_directory(directory_file: &Path) {
+/**
+ * This is the entry point function that is responsible for checking the folders and call the analyzer functions
+ */
+pub fn read_directory(directory_file: &Path, results: &mut HashMap<String, Vec<String>>) {
     for entry in fs::read_dir(directory_file).expect("") {
         let entry = entry.expect("");
         let path = entry.path();
 
         if path.is_dir() {
             if path.ends_with("hooks") {
-                analyze_hook_dir(&path)
+                analyze_hook_dir(&path, results)
             } else {
-                read_directory(&path);
+                read_directory(&path, results);
             }
         }
     }
 }
 
-fn analyze_hook_dir(directory_path: &Path) {
+/**
+ * This function runs the analyzer in the hooks folder
+ */
+fn analyze_hook_dir(directory_path: &Path, results: &mut HashMap<String, Vec<String>>) {
     for entry in fs::read_dir(directory_path).expect("Failed to read hooks directory") {
         let entry = entry.expect("Failed to read directory entry");
         let path = entry.path();
@@ -145,7 +167,10 @@ fn analyze_hook_dir(directory_path: &Path) {
                     Ok(module) => {
                         let analyzer = Analyzer::new(path.to_str().unwrap());
 
-                        analyzer.run(&module);
+                        let analysis_results = analyzer.run(&module);
+
+                        // push to results
+                        results.extend(analysis_results);
                     }
                     Err(err) => {
                         eprintln!("Error parsing file {}: {:?}", path.display(), err);

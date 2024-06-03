@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 
@@ -8,5 +9,9 @@ fn main() {
     println!("Reading files from: [{}]", dir);
 
     let src_directory = Path::new(dir);
-    analyzer::read_directory(src_directory);
+
+    let mut results = HashMap::new();
+    analyzer::read_directory(src_directory, &mut results);
+
+    print!("Final {:#?}", results)
 }
