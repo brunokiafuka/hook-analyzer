@@ -10,4 +10,6 @@ This is a simple tool to analyze the hooks used in a React project. It will list
 2. Run `cargo run -- <path-to-react-project>` in the root directory of the project
 
 
+After successfully running the command, you get a report generated under `report.html` in the root directory of the project. 
 
+[!img](assets/image.png)
