@@ -5,6 +5,22 @@ use swc_ecma_ast::*;
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 use swc_ecma_visit::{Visit, VisitWith};
 
+pub const DEFAULT_HOOKS: [&str; 13] = [
+    "useState",
+    "useEffect",
+    "useContext",
+    "useReducer",
+    "useCallback",
+    "useMemo",
+    "useRef",
+    "useImperativeHandle",
+    "useLayoutEffect",
+    "useDebugValue",
+    "useTransition",
+    "useDeferredValue",
+    "useId",
+];
+
 struct Analyzer {
     filename: String,
 }
@@ -59,26 +75,10 @@ impl TreeVisitor {
 impl Visit for TreeVisitor {
     // TODO: check non caller cases and handle empty states
     fn visit_call_expr(&mut self, call_expr: &CallExpr) {
-        let default_hooks = [
-            "useState",
-            "useEffect",
-            "useContext",
-            "useReducer",
-            "useCallback",
-            "useMemo",
-            "useRef",
-            "useImperativeHandle",
-            "useLayoutEffect",
-            "useDebugValue",
-            "useTransition",
-            "useDeferredValue",
-            "useId",
-        ];
-
         if let Callee::Expr(expr) = &call_expr.callee {
             // check directly for use* without React.* object reference
             if let Expr::Ident(obj_id) = &**expr {
-                if default_hooks.contains(&obj_id.sym.as_ref()) {
+                if DEFAULT_HOOKS.contains(&obj_id.sym.as_ref()) {
                     self.arrange_report(obj_id.sym.as_ref().to_string());
                 } else {
                     println!("No hook in file {}", self.filename);
@@ -87,7 +87,7 @@ impl Visit for TreeVisitor {
                 // check for React.use*
                 if let Expr::Ident(_obj_id) = &*member_expr.obj {
                     if let MemberProp::Ident(prop_id) = &member_expr.prop {
-                        if default_hooks.contains(&prop_id.sym.as_ref()) {
+                        if DEFAULT_HOOKS.contains(&prop_id.sym.as_ref()) {
                             self.arrange_report(prop_id.sym.as_ref().to_string());
                         } else {
                             println!("No hook in file {}", self.filename);

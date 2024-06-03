@@ -3,6 +3,7 @@ use std::env;
 use std::path::Path;
 
 mod analyzer;
+mod reporter;
 fn main() {
     let args: Vec<String> = env::args().collect();
     let dir = &args[1];
@@ -13,5 +14,5 @@ fn main() {
     let mut results = HashMap::new();
     analyzer::read_directory(src_directory, &mut results);
 
-    print!("Final {:#?}", results)
+    reporter::run(&results, "report.html").expect("Error generating report")
 }
