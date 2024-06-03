@@ -12,4 +12,4 @@ This is a simple tool to analyze the hooks used in a React project. It will list
 
 After successfully running the command, you get a report generated under `report.html` in the root directory of the project. 
 
-[!img](assets/image.png)
+![image](assets/image.png)
