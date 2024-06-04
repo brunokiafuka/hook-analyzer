@@ -19,6 +19,7 @@ pub const DEFAULT_HOOKS: [&str; 13] = [
     "useTransition",
     "useDeferredValue",
     "useId",
+    "useSyncExternalStore"
 ];
 
 struct Analyzer {
