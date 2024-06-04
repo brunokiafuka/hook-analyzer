@@ -5,7 +5,8 @@ use std::{
 
 use crate::analyzer;
 
-pub fn run(results: &HashMap<String, Vec<String>>, output_file: &str) -> std::io::Result<()> {
+pub fn run(results: &HashMap<String, analyzer::Report>, output_file: &str) -> std::io::Result<()> {
+    // TODO: Add metrics measures %
     let mut html = String::new();
     html.push_str("<html><head><title>React Hooks Analyzer Report</title>");
     html.push_str("<style>");
@@ -21,15 +22,20 @@ pub fn run(results: &HashMap<String, Vec<String>>, output_file: &str) -> std::io
     html.push_str(&format!("<p>Files visited: {}</p>", results.len()));
 
     html.push_str("<table>");
-    html.push_str("<tr><th>File</th><th>Is valid custom hook</th><th>Used default hooks</th></tr>");
+    html.push_str("<tr><th>File</th><th>Is valid custom hook</th><th>Export starts with <code>use[HookName]</code> prefix</th><th>Used default hooks</th></tr>");
 
-    for (file, hooks) in results {
-        let hooks_set: HashSet<_> = hooks.iter().cloned().collect();
+    for (file, report) in results {
+        let hooks_set: HashSet<_> = report.hooks.iter().cloned().collect();
 
         let has_valid_hooks = match analyzer::DEFAULT_HOOKS
             .iter()
-            .any(|&item| hooks_set.contains(item))
+            .any(|&item| hooks_set.contains(item) && report.export_use_prefix)
         {
+            true => "✅",
+            false => "❌",
+        };
+
+        let starts_with_use_prefix = match report.export_use_prefix {
             true => "✅",
             false => "❌",
         };
@@ -39,10 +45,12 @@ pub fn run(results: &HashMap<String, Vec<String>>, output_file: &str) -> std::io
             <td>{}</td>
             <td>{}</td>
             <td>{}</td>
+            <td>{}</td>
             </tr>",
             file,
             has_valid_hooks,
-            hooks.join(", ")
+            starts_with_use_prefix,
+            report.hooks.join(", ")
         ));
     }
 

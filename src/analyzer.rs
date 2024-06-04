@@ -5,7 +5,7 @@ use swc_ecma_ast::*;
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 use swc_ecma_visit::{Visit, VisitWith};
 
-pub const DEFAULT_HOOKS: [&str; 13] = [
+pub const DEFAULT_HOOKS: [&str; 14] = [
     "useState",
     "useEffect",
     "useContext",
@@ -19,16 +19,22 @@ pub const DEFAULT_HOOKS: [&str; 13] = [
     "useTransition",
     "useDeferredValue",
     "useId",
-    "useSyncExternalStore"
+    "useSyncExternalStore",
 ];
 
 struct Analyzer {
     filename: String,
 }
 
+#[derive(Debug)]
+pub struct Report {
+    pub hooks: Vec<String>,
+    pub export_use_prefix: bool,
+}
+
 struct TreeVisitor {
     filename: String,
-    pub report: HashMap<String, Vec<String>>,
+    pub report: HashMap<String, Report>,
 }
 
 impl Analyzer {
@@ -38,7 +44,7 @@ impl Analyzer {
         }
     }
 
-    fn run(&self, module: &Module) -> HashMap<String, Vec<String>> {
+    fn run(&self, module: &Module) -> HashMap<String, Report> {
         let mut visitor = TreeVisitor::new(&self.filename);
 
         module.visit_with(&mut visitor);
@@ -59,22 +65,30 @@ impl TreeVisitor {
     fn arrange_report(&mut self, value: String) {
         let key = self.filename.to_string();
 
-        let empty_vec = vec![];
+        let empty_vec = Report {
+            hooks: vec![],
+            export_use_prefix: false,
+        };
 
         let previous_result = match self.report.get(&key) {
             Some(x) => x,
             None => &empty_vec,
         };
 
-        let mut copy_previous_result = previous_result.clone();
-        copy_previous_result.push(value);
+        let copy_previous_result = Report {
+            hooks: {
+                let mut hooks = previous_result.hooks.clone();
+                hooks.push(value);
+                hooks
+            },
+            export_use_prefix: { previous_result.export_use_prefix },
+        };
 
         self.report.insert(key, copy_previous_result);
     }
 }
 
 impl Visit for TreeVisitor {
-    // TODO: check non caller cases and handle empty states
     fn visit_call_expr(&mut self, call_expr: &CallExpr) {
         if let Callee::Expr(expr) = &call_expr.callee {
             // check directly for use* without React.* object reference
@@ -99,6 +113,35 @@ impl Visit for TreeVisitor {
         }
 
         call_expr.visit_children_with(self);
+    }
+
+    fn visit_export_decl(&mut self, exp_decl: &ExportDecl) {
+        if let Decl::Fn(fn_dec) = &exp_decl.decl {
+            let key = self.filename.to_string();
+
+            let empty_vec = Report {
+                hooks: vec![],
+                export_use_prefix: false,
+            };
+
+            let previous_result = match self.report.get(&key) {
+                Some(x) => x,
+                None => &empty_vec,
+            };
+            let copy_previous_result = Report {
+                hooks: previous_result.hooks.clone(),
+                export_use_prefix: {
+                    match fn_dec.ident.sym.to_string().starts_with("use") {
+                        true => true,
+                        false => false,
+                    }
+                },
+            };
+
+            self.report.insert(key, copy_previous_result);
+        }
+
+        exp_decl.visit_children_with(self);
     }
 }
 
@@ -135,7 +178,7 @@ fn parse_file(filename: &str) -> Result<Module, swc_ecma_parser::error::Error> {
 /**
  * This is the entry point function that is responsible for checking the folders and call the analyzer functions
  */
-pub fn read_directory(directory_file: &Path, results: &mut HashMap<String, Vec<String>>) {
+pub fn read_directory(directory_file: &Path, results: &mut HashMap<String, Report>) {
     for entry in fs::read_dir(directory_file).expect("") {
         let entry = entry.expect("");
         let path = entry.path();
@@ -153,17 +196,16 @@ pub fn read_directory(directory_file: &Path, results: &mut HashMap<String, Vec<S
 /**
  * This function runs the analyzer in the hooks folder
  */
-fn analyze_hook_dir(directory_path: &Path, results: &mut HashMap<String, Vec<String>>) {
+fn analyze_hook_dir(directory_path: &Path, results: &mut HashMap<String, Report>) {
     for entry in fs::read_dir(directory_path).expect("Failed to read hooks directory") {
         let entry = entry.expect("Failed to read directory entry");
         let path = entry.path();
 
         if path.is_file() {
-            let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            //  let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            // previous code was checking for (filename.starts_with("use"))
             let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-            if (filename.starts_with("use"))
-                && (ext == "js" || ext == "jsx" || ext == "ts" || ext == "tsx")
-            {
+            if ext == "js" || ext == "jsx" || ext == "ts" || ext == "tsx" {
                 match parse_file(path.to_str().unwrap()) {
                     Ok(module) => {
                         let analyzer = Analyzer::new(path.to_str().unwrap());
