@@ -1,1 +1,1 @@
-export function nonValidHook() {}
+export const nonValidHook = () => {};

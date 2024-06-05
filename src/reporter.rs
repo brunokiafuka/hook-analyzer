@@ -22,7 +22,15 @@ pub fn run(results: &HashMap<String, analyzer::Report>, output_file: &str) -> st
     html.push_str(&format!("<p>Files visited: {}</p>", results.len()));
 
     html.push_str("<table>");
-    html.push_str("<tr><th>File</th><th>Is valid custom hook</th><th>Export starts with <code>use[HookName]</code> prefix</th><th>Used default hooks</th></tr>");
+    html.push_str(
+        "<tr>
+                    <th>File Path</th>
+                    <th>Is valid custom hook</th>
+                    <th><code>use[HookName]</code> prefix</th>
+                    <th>Used default hooks</th>
+                    <th>Export Method</th>
+                </tr>",
+    );
 
     for (file, report) in results {
         let hooks_set: HashSet<_> = report.hooks.iter().cloned().collect();
@@ -40,8 +48,18 @@ pub fn run(results: &HashMap<String, analyzer::Report>, output_file: &str) -> st
             false => "❌",
         };
 
+        let export_type = match report.export_type {
+            analyzer::FileExportType::Function => {
+                "Function Declaration <code>function f(…) {…}</code>"
+            }
+            analyzer::FileExportType::Arrow => {
+                "Function Expression <code>const f = () =>{...}</code>"
+            }
+        };
+
         html.push_str(&format!(
             "<tr>
+            <td>{}</td>
             <td>{}</td>
             <td>{}</td>
             <td>{}</td>
@@ -50,7 +68,8 @@ pub fn run(results: &HashMap<String, analyzer::Report>, output_file: &str) -> st
             file,
             has_valid_hooks,
             starts_with_use_prefix,
-            report.hooks.join(", ")
+            report.hooks.join(", "),
+            export_type
         ));
     }
 

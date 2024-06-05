@@ -22,15 +22,30 @@ pub const DEFAULT_HOOKS: [&str; 14] = [
     "useSyncExternalStore",
 ];
 
+const HOOK_PREFIX: &str = "use";
+
 struct Analyzer {
     filename: String,
+}
+
+#[derive(Debug)]
+pub enum FileExportType {
+    Function,
+    Arrow,
 }
 
 #[derive(Debug)]
 pub struct Report {
     pub hooks: Vec<String>,
     pub export_use_prefix: bool,
+    pub export_type: FileExportType,
 }
+
+const DEFAULT_REPORT: Report = Report {
+    hooks: vec![],
+    export_use_prefix: false,
+    export_type: FileExportType::Arrow,
+};
 
 struct TreeVisitor {
     filename: String,
@@ -62,13 +77,10 @@ impl TreeVisitor {
         }
     }
 
-    fn arrange_report(&mut self, value: String) {
+    fn collect_hooks(&mut self, value: String) {
         let key = self.filename.to_string();
 
-        let empty_vec = Report {
-            hooks: vec![],
-            export_use_prefix: false,
-        };
+        let empty_vec = DEFAULT_REPORT;
 
         let previous_result = match self.report.get(&key) {
             Some(x) => x,
@@ -82,6 +94,40 @@ impl TreeVisitor {
                 hooks
             },
             export_use_prefix: { previous_result.export_use_prefix },
+            export_type: {
+                match previous_result.export_type {
+                    FileExportType::Arrow => FileExportType::Arrow,
+                    FileExportType::Function => FileExportType::Function,
+                }
+            },
+        };
+
+        self.report.insert(key, copy_previous_result);
+    }
+
+    fn collect_export_prefix(&mut self, export_value: String, export_type: FileExportType) {
+        let key = self.filename.to_string();
+
+        let empty_vec = DEFAULT_REPORT;
+
+        let previous_result = match self.report.get(&key) {
+            Some(x) => x,
+            None => &empty_vec,
+        };
+        let copy_previous_result = Report {
+            hooks: previous_result.hooks.clone(),
+            export_use_prefix: {
+                match export_value.starts_with(HOOK_PREFIX) {
+                    true => true,
+                    false => false,
+                }
+            },
+            export_type: {
+                match export_type {
+                    FileExportType::Arrow => FileExportType::Arrow,
+                    FileExportType::Function => FileExportType::Function,
+                }
+            },
         };
 
         self.report.insert(key, copy_previous_result);
@@ -94,7 +140,7 @@ impl Visit for TreeVisitor {
             // check directly for use* without React.* object reference
             if let Expr::Ident(obj_id) = &**expr {
                 if DEFAULT_HOOKS.contains(&obj_id.sym.as_ref()) {
-                    self.arrange_report(obj_id.sym.as_ref().to_string());
+                    self.collect_hooks(obj_id.sym.as_ref().to_string());
                 } else {
                     println!("No hook in file {}", self.filename);
                 }
@@ -103,7 +149,7 @@ impl Visit for TreeVisitor {
                 if let Expr::Ident(_obj_id) = &*member_expr.obj {
                     if let MemberProp::Ident(prop_id) = &member_expr.prop {
                         if DEFAULT_HOOKS.contains(&prop_id.sym.as_ref()) {
-                            self.arrange_report(prop_id.sym.as_ref().to_string());
+                            self.collect_hooks(prop_id.sym.as_ref().to_string());
                         } else {
                             println!("No hook in file {}", self.filename);
                         }
@@ -117,28 +163,13 @@ impl Visit for TreeVisitor {
 
     fn visit_export_decl(&mut self, exp_decl: &ExportDecl) {
         if let Decl::Fn(fn_dec) = &exp_decl.decl {
-            let key = self.filename.to_string();
-
-            let empty_vec = Report {
-                hooks: vec![],
-                export_use_prefix: false,
-            };
-
-            let previous_result = match self.report.get(&key) {
-                Some(x) => x,
-                None => &empty_vec,
-            };
-            let copy_previous_result = Report {
-                hooks: previous_result.hooks.clone(),
-                export_use_prefix: {
-                    match fn_dec.ident.sym.to_string().starts_with("use") {
-                        true => true,
-                        false => false,
-                    }
-                },
-            };
-
-            self.report.insert(key, copy_previous_result);
+            // Function declaration
+            self.collect_export_prefix(fn_dec.ident.sym.to_string(), FileExportType::Function);
+        } else if let Decl::Var(var_dec) = &exp_decl.decl {
+            // Function expression
+            if let Pat::Ident(var_dec) = &var_dec.decls[0].name {
+                self.collect_export_prefix(var_dec.id.sym.to_string(), FileExportType::Arrow);
+            }
         }
 
         exp_decl.visit_children_with(self);
