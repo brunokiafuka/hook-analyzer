@@ -14,8 +14,15 @@ fn main() {
     let mut results = HashMap::new();
     analyzer::read_directory(src_directory, &mut results);
 
+    let running_dir = env::current_dir().expect("Error finding directory");
+
     reporter::run(&results, "report.html")
         .is_ok()
-        .then(|| print!("Report Ready @ "))
+        .then(|| {
+            print!(
+                "Report Ready @ file://{}/report.html\n",
+                running_dir.display().to_string()
+            )
+        })
         .expect("Error generating report");
 }
