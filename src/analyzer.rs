@@ -39,12 +39,14 @@ pub struct Report {
     pub hooks: Vec<String>,
     pub export_use_prefix: bool,
     pub export_type: FileExportType,
+    pub hook_name: String,
 }
 
 const DEFAULT_REPORT: Report = Report {
     hooks: vec![],
     export_use_prefix: false,
     export_type: FileExportType::Arrow,
+    hook_name: String::new(),
 };
 
 struct TreeVisitor {
@@ -93,6 +95,7 @@ impl TreeVisitor {
                 hooks.push(value);
                 hooks
             },
+            hook_name: { previous_result.hook_name.clone() },
             export_use_prefix: { previous_result.export_use_prefix },
             export_type: {
                 match previous_result.export_type {
@@ -116,6 +119,7 @@ impl TreeVisitor {
         };
         let copy_previous_result = Report {
             hooks: previous_result.hooks.clone(),
+            hook_name: export_value.clone(),
             export_use_prefix: {
                 match export_value.starts_with(HOOK_PREFIX) {
                     true => true,
@@ -141,8 +145,6 @@ impl Visit for TreeVisitor {
             if let Expr::Ident(obj_id) = &**expr {
                 if DEFAULT_HOOKS.contains(&obj_id.sym.as_ref()) {
                     self.collect_hooks(obj_id.sym.as_ref().to_string());
-                } else {
-                    println!("No hook in file {}", self.filename);
                 }
             } else if let Expr::Member(member_expr) = &**expr {
                 // check for React.use*
@@ -150,8 +152,6 @@ impl Visit for TreeVisitor {
                     if let MemberProp::Ident(prop_id) = &member_expr.prop {
                         if DEFAULT_HOOKS.contains(&prop_id.sym.as_ref()) {
                             self.collect_hooks(prop_id.sym.as_ref().to_string());
-                        } else {
-                            println!("No hook in file {}", self.filename);
                         }
                     }
                 }

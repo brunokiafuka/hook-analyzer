@@ -25,6 +25,7 @@ pub fn run(results: &HashMap<String, analyzer::Report>, output_file: &str) -> st
     html.push_str(
         "<tr>
                     <th>File Path</th>
+                    <th>Hook Name</th>
                     <th>Is valid custom hook</th>
                     <th><code>use[HookName]</code> prefix</th>
                     <th>Used default hooks</th>
@@ -60,12 +61,14 @@ pub fn run(results: &HashMap<String, analyzer::Report>, output_file: &str) -> st
         html.push_str(&format!(
             "<tr>
             <td>{}</td>
+            <td><code>{}</code></td>
             <td>{}</td>
             <td>{}</td>
-            <td>{}</td>
+            <td><code>{}</code></td>
             <td>{}</td>
             </tr>",
             file,
+            report.hook_name,
             has_valid_hooks,
             starts_with_use_prefix,
             report.hooks.join(", "),

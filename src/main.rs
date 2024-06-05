@@ -14,5 +14,8 @@ fn main() {
     let mut results = HashMap::new();
     analyzer::read_directory(src_directory, &mut results);
 
-    reporter::run(&results, "report.html").expect("Error generating report")
+    reporter::run(&results, "report.html")
+        .is_ok()
+        .then(|| print!("Report Ready @ "))
+        .expect("Error generating report");
 }
