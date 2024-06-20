@@ -7,31 +7,36 @@ use crate::analyzer;
 
 pub fn run(results: &HashMap<String, analyzer::Report>, output_file: &str) -> std::io::Result<()> {
     // TODO: Add metrics measures %
-    let mut html = String::new();
-    html.push_str("<html><head><title>React Hooks Analyzer Report</title>");
-    html.push_str("<style>");
-    html.push_str("body { font-family: Arial, sans-serif; margin: 20px; }");
-    html.push_str("h1 { color: #333; }");
-    html.push_str("table { width: 100%; border-collapse: collapse; margin-top: 20px; }");
-    html.push_str("th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }");
-    html.push_str("th { background-color: #f4f4f4; }");
-    html.push_str("tr:nth-child(even) { background-color: #f9f9f9; }");
-    html.push_str("</style>");
-    html.push_str("</head><body>");
-    html.push_str("<h1>Custom React Hooks Analyzer Report</h1>");
-    html.push_str(&format!("<p>Files visited: {}</p>", results.len()));
-
-    html.push_str("<table>");
-    html.push_str(
-        "<tr>
+    let mut html = format!(
+    r#"<!DOCTYPE html>
+    <html>
+        <head>
+            <title>React Hooks Analyzer Report</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                h1 {{ color: #333; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+                th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }}
+                th {{ background-color: #f4f4f4; }}
+                tr:nth-child(even) {{ background-color: #f9f9f9; }}
+            </style>
+        </head>
+    <body>
+        <h1>Custom React Hooks Analyzer Report</h1>
+        <p>Files visited: {}</p>
+        <table>
+            <thead>
+                <tr>
                     <th>File Path</th>
                     <th>Hook Name</th>
                     <th>Is valid custom hook</th>
                     <th><code>use[HookName]</code> prefix</th>
                     <th>Used default hooks</th>
                     <th>Export Method</th>
-                </tr>",
-    );
+                </tr>
+            </thead>
+            <tbody>"#,results.len()
+        );
 
     for (file, report) in results {
         let hooks_set: HashSet<_> = report.hooks.iter().cloned().collect();
@@ -58,15 +63,16 @@ pub fn run(results: &HashMap<String, analyzer::Report>, output_file: &str) -> st
             }
         };
 
-        html.push_str(&format!(
-            "<tr>
-            <td>{}</td>
-            <td><code>{}</code></td>
-            <td>{}</td>
-            <td>{}</td>
-            <td><code>{}</code></td>
-            <td>{}</td>
-            </tr>",
+        html.push_str(&format!("
+                <tr>
+                    <td>{}</td>
+                    <td><code>{}</code></td>
+                    <td>{}</td>
+                    <td>{}</td>
+                    <td><code>{}</code></td>
+                    <td>{}</td>
+                </tr>
+        ",
             file,
             report.hook_name,
             has_valid_hooks,
@@ -76,8 +82,12 @@ pub fn run(results: &HashMap<String, analyzer::Report>, output_file: &str) -> st
         ));
     }
 
-    html.push_str("</table>");
-    html.push_str("</body></html>");
+    html.push_str("
+            </tbody>
+        </table>
+    </body>
+    </html>
+    ");
 
     fs::write(output_file, html)
 }
