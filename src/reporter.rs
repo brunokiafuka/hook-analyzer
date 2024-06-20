@@ -11,7 +11,7 @@ pub fn run(results: &HashMap<String, analyzer::Report>, output_file: &str) -> st
     r#"<!DOCTYPE html>
     <html>
         <head>
-            <title>React Hooks Manuel Report</title>
+            <title>React Hooks Analyzer Report</title>
             <style>
                 body {{ font-family: Arial, sans-serif; margin: 20px; }}
                 h1 {{ color: #333; }}
